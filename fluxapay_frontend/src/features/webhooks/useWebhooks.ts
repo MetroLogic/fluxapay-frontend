@@ -1,104 +1,116 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { WebhookEvent, WebhookFilter, WebhookStatus, WebhookEventType } from "./types";
-import { mockWebhooks } from "./mockData";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 export const useWebhooks = () => {
-    const [webhooks, setWebhooks] = useState<WebhookEvent[]>(mockWebhooks);
+    const [webhooks, setWebhooks] = useState<WebhookEvent[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [filters, setFilters] = useState<WebhookFilter>({
         status: "all",
         eventType: "all",
         search: "",
     });
 
-    const filteredWebhooks = useMemo(() => {
-        return webhooks.filter((webhook) => {
-            // Filter by status
-            if (filters.status && filters.status !== "all" && webhook.status !== filters.status) {
-                return false;
+    const fetchWebhooks = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+            const queryParams = new URLSearchParams();
+            if (filters.status && filters.status !== "all") queryParams.append("status", filters.status);
+            if (filters.eventType && filters.eventType !== "all") queryParams.append("eventType", filters.eventType);
+            if (filters.search) queryParams.append("search", filters.search);
+
+            const response = await fetch(`${API_BASE_URL}/webhooks?${queryParams.toString()}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) throw new Error("Unauthorized: Please log in.");
+                throw new Error("Failed to fetch webhooks");
             }
 
-            // Filter by event type
-            if (filters.eventType && filters.eventType !== "all" && webhook.eventType !== filters.eventType) {
-                return false;
-            }
+            const data = await response.json();
+            const mappedLogs = data.logs.map((log: any) => ({
+                id: log.id,
+                eventType: log.event_type,
+                url: log.url,
+                status: log.status,
+                payload: log.payload,
+                response: log.response,
+                createdAt: log.created_at,
+                attempts: log.attempts,
+                lastAttemptAt: log.last_attempt,
+                nextRetryAt: log.next_retry,
+            }));
+            setWebhooks(mappedLogs);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    }, [filters]);
 
-            // Filter by search (id or payload content - simple version)
-            if (filters.search) {
-                const searchLower = filters.search.toLowerCase();
-                const matchesId = webhook.id.toLowerCase().includes(searchLower);
-                // Deep search in payload could be expensive, keeping it simple for now:
-                // const matchesPayload = JSON.stringify(webhook.payload).toLowerCase().includes(searchLower);
-
-                // Also check payload id often used like payment_id
-                const payloadId = webhook.payload.id || "";
-                const matchesPayloadId = payloadId.toLowerCase().includes(searchLower);
-
-                if (!matchesId && !matchesPayloadId) {
-                    return false;
-                }
-            }
-
-            // Filter by date range (if implemented)
-            if (filters.dateRange) {
-                const date = new Date(webhook.createdAt);
-                if (date < filters.dateRange.start || date > filters.dateRange.end) {
-                    return false;
-                }
-            }
-
-            return true;
-        });
-    }, [webhooks, filters]);
-
-    // Sort by date desc
-    const sortedWebhooks = useMemo(() => {
-        return [...filteredWebhooks].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }, [filteredWebhooks]);
+    useEffect(() => {
+        fetchWebhooks();
+    }, [fetchWebhooks]);
 
     const resendWebhook = async (id: string) => {
-        // Mock API call
-        console.log(`Resending webhook ${id}...`);
-        return new Promise<boolean>((resolve) => {
-            setTimeout(() => {
-                alert(`Webhook ${id} resent successfully!`);
-                resolve(true);
-            }, 1000);
-        });
+        try {
+            const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+            const response = await fetch(`${API_BASE_URL}/webhooks/resend`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ id }),
+            });
+
+            if (!response.ok) throw new Error("Failed to resend webhook");
+
+            await fetchWebhooks();
+            alert("Webhook resend triggered successfully.");
+            return true;
+        } catch (err: any) {
+            alert(`Error: ${err.message}`);
+            return false;
+        }
     };
 
     const sendTestWebhook = async (eventType: WebhookEventType, url: string) => {
-        console.log(`Sending test webhook ${eventType} to ${url}...`);
-        return new Promise<{ success: boolean; message: string }>((resolve) => {
-            setTimeout(() => {
-                // Random success/fail for demo
-                const isSuccess = Math.random() > 0.2;
-                if (isSuccess) {
-                    resolve({ success: true, message: "Test webhook sent successfully." });
-                    // Optional: Add to list
-                    const newMock: WebhookEvent = {
-                        id: `wh_test_${Date.now()}`,
-                        eventType,
-                        url,
-                        status: WebhookStatus.SUCCESS,
-                        payload: { test: true, timestamp: Date.now() },
-                        response: { status: 200, body: '{"ok": true}' },
-                        createdAt: new Date().toISOString(),
-                        attempts: 1,
-                        lastAttemptAt: new Date().toISOString(),
-                    };
-                    setWebhooks(prev => [newMock, ...prev]);
-                } else {
-                    resolve({ success: false, message: "Failed to connect to endpoint." });
-                }
-            }, 1500);
-        });
+        try {
+            const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+            const response = await fetch(`${API_BASE_URL}/webhooks/test`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ eventType, url }),
+            });
+
+            if (!response.ok) throw new Error("Failed to send test webhook");
+
+            await fetchWebhooks();
+            return { success: true, message: "Test webhook sent successfully." };
+        } catch (err: any) {
+            return { success: false, message: err.message };
+        }
     };
 
     return {
-        webhooks: sortedWebhooks,
+        webhooks,
+        loading,
+        error,
         filters,
         setFilters,
         resendWebhook,
-        sendTestWebhook
+        sendTestWebhook,
+        refresh: fetchWebhooks
     };
 };

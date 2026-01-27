@@ -52,3 +52,8 @@ export type Merchant = Prisma.MerchantModel
  * 
  */
 export type OTP = Prisma.OTPModel
+/**
+ * Model WebhookLog
+ * 
+ */
+export type WebhookLog = Prisma.WebhookLogModel

@@ -10,4 +10,5 @@
  */
 export type * from './models/Merchant'
 export type * from './models/OTP'
+export type * from './models/WebhookLog'
 export type * from './commonInputTypes'
