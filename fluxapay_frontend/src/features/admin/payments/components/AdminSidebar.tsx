@@ -6,7 +6,8 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, CreditCard, Wallet,
   Webhook, FileText, ClipboardList, Settings,
-  ShieldCheck, Menu, X, ServerCog
+  ShieldCheck, Menu, X, ServerCog , Scale
+
 } from 'lucide-react';
 
 const navigation = [
@@ -14,6 +15,7 @@ const navigation = [
   { name: 'Merchants', href: '/admin/merchants', icon: Users },
   { name: 'Payments', href: '/admin/payments', icon: CreditCard },
   { name: 'Settlements', href: '/admin/settlements', icon: Wallet },
+  { name: 'Reconciliation', href: '/admin/reconciliation', icon: Scale },
   { name: 'Webhooks', href: '/admin/webhooks', icon: Webhook },
   { name: 'System', href: '/admin/system', icon: ServerCog },
   { name: 'KYC', href: '/admin/kyc', icon: FileText },
